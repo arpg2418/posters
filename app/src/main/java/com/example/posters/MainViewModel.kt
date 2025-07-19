@@ -31,7 +31,7 @@ class MainViewModel : ViewModel() {
             try {
                 // Create the Retrofit instance
                 val retrofit = Retrofit.Builder()
-                    .baseUrl("https://posters-backend-ibn4.onrender.com/getWallpapers") // e.g., "https://posters-backend.onrender.com/"
+                    .baseUrl("https://posters-backend-ibn4.onrender.com/") // e.g., "https://posters-backend.onrender.com/"
                     .addConverterFactory(GsonConverterFactory.create())
                     .build()
 
