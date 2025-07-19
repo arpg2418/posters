@@ -1,7 +1,11 @@
 package com.example.posters
 
+import android.app.Activity
 import android.app.WallpaperManager
 import android.content.Context
+import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.drawable.BitmapDrawable
 import android.net.Uri
 import android.os.Bundle
 import android.widget.Toast
@@ -51,12 +55,15 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.foundation.gestures.detectTransformGestures
-import androidx.compose.material.icons.filled.CloudDownload
-import androidx.compose.material.icons.filled.Downloading
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalView
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
+import androidx.lifecycle.viewmodel.compose.viewModel
 
 
 // Data class defining the structure of a wallpaper object.
@@ -87,9 +94,24 @@ class MainActivity : ComponentActivity() {
 
 // This composable orchestrates the main UI, including the top bar, grid, and overlay.
 @Composable
-fun MainScreen(viewModel: MainViewModel = androidx.lifecycle.viewmodel.compose.viewModel()) {
+fun MainScreen(viewModel: MainViewModel = viewModel()) {
     var selectedWallpaper by remember { mutableStateOf<Wallpaper?>(null) }
     val uiState = viewModel.wallpaperUiState
+
+    val view = LocalView.current
+    if (!view.isInEditMode) {
+        SideEffect {
+            val window = (view.context as Activity).window
+            // This makes the navigation bar transparent and lets our app draw behind it
+            WindowCompat.setDecorFitsSystemWindows(window, false)
+
+            val insetsController = WindowCompat.getInsetsController(window, view)
+            // Hide the system navigation bar
+            insetsController.hide(WindowInsetsCompat.Type.navigationBars())
+            // Set the behavior so that the bar reappears with a swipe from the edge
+            insetsController.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        }
+    }
 
     Box(Modifier.fillMaxSize()) {
         Scaffold(
@@ -137,11 +159,14 @@ fun MainScreen(viewModel: MainViewModel = androidx.lifecycle.viewmodel.compose.v
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeTopBar() {
-    TopAppBar(
+    // The key change is using CenterAlignedTopAppBar instead of TopAppBar
+    CenterAlignedTopAppBar(
         title = {
             Text("Posters", color = Color.White, fontWeight = FontWeight.Bold)
         },
-        colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
+        colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+            containerColor = Color.Transparent
+        )
     )
 }
 
@@ -251,7 +276,7 @@ fun WallpaperOverlay(wallpaper: Wallpaper?, onClose: () -> Unit) {
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
     var isFullScreen by remember { mutableStateOf(false) }
-    var scale by remember { mutableStateOf(1f) }
+    var scale by remember { mutableFloatStateOf(1f) }
     var offset by remember { mutableStateOf(Offset.Zero) }
 
     // This effect resets everything when the overlay is closed
@@ -434,11 +459,11 @@ private suspend fun downloadAndGetUri(context: Context, wallpaper: Wallpaper): U
 
     return try {
         val result = (loader.execute(request) as SuccessResult).drawable
-        val bitmap = (result as android.graphics.drawable.BitmapDrawable).bitmap
+        val bitmap = (result as BitmapDrawable).bitmap
 
         val file = File(context.filesDir, "${wallpaper.id}.jpg")
         FileOutputStream(file).use { stream ->
-            bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 100, stream)
+            bitmap.compress(Bitmap.CompressFormat.JPEG, 100, stream)
         }
         // Return the content URI for the saved file
         WallpaperProvider.getUriForWallpaper(wallpaper.id)
@@ -479,14 +504,14 @@ private suspend fun openSystemWallpaperPreview(context: Context, wallpaper: Wall
 
     // --- TIER 1: Try the most specific, modern intent first ---
     // This intent explicitly targets the modern Google Wallpapers picker.
-    val modernIntent = android.content.Intent(android.content.Intent.ACTION_SET_WALLPAPER)
+    val modernIntent = Intent(Intent.ACTION_SET_WALLPAPER)
     modernIntent.setClassName(
         "com.google.android.apps.wallpaper",
         "com.google.android.apps.wallpaper.picker.DeepLinkActivity"
     )
     modernIntent.setDataAndType(uri, "image/jpeg")
     modernIntent.putExtra("mimeType", "image/jpeg")
-    modernIntent.addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    modernIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
 
     try {
         // Attempt to launch the most modern picker
@@ -499,10 +524,10 @@ private suspend fun openSystemWallpaperPreview(context: Context, wallpaper: Wall
 
     // --- TIER 2: Fallback to the general "set wallpaper" action ---
     // This is the code we tried before. It's the second-best option.
-    val generalIntent = android.content.Intent(android.content.Intent.ACTION_SET_WALLPAPER)
+    val generalIntent = Intent(Intent.ACTION_SET_WALLPAPER)
     generalIntent.setDataAndType(uri, "image/jpeg")
     generalIntent.putExtra("mimeType", "image/jpeg")
-    generalIntent.addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    generalIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
 
     try {
         context.startActivity(generalIntent)

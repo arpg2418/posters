@@ -20,7 +20,15 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            // This is the most important line. It enables code shrinking with R8.
+            isMinifyEnabled = true
+
+            // This enables resource shrinking (removes unused images, layouts, etc.)
+            // It only works if isMinifyEnabled is true.
+            isShrinkResources = true
+
+            // This tells the shrinker which rules to follow to avoid breaking your app.
+            // The default file is usually enough for most projects.
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
