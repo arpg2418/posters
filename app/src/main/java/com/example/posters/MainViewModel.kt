@@ -6,8 +6,10 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.launch
+import okhttp3.OkHttpClient
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
+import java.util.concurrent.TimeUnit
 
 // Define states for our UI
 sealed interface WallpaperUiState {
@@ -29,9 +31,17 @@ class MainViewModel : ViewModel() {
         viewModelScope.launch {
             wallpaperUiState = WallpaperUiState.Loading
             try {
-                // Create the Retrofit instance
+                // 1. Create a custom OkHttpClient with a longer timeout
+                val okHttpClient = OkHttpClient.Builder()
+                    .connectTimeout(60, TimeUnit.SECONDS) // Wait 60 seconds to connect
+                    .readTimeout(60, TimeUnit.SECONDS)    // Wait 60 seconds for data
+                    .writeTimeout(60, TimeUnit.SECONDS)   // Wait 60 seconds to send data
+                    .build()
+
+                // 2. Build Retrofit using our custom client
                 val retrofit = Retrofit.Builder()
-                    .baseUrl("https://posters-backend-ibn4.onrender.com/") // e.g., "https://posters-backend.onrender.com/"
+                    .baseUrl("https://posters-backend-ibn4.onrender.com/") // Your Render URL
+                    .client(okHttpClient) // <-- Add the custom client here
                     .addConverterFactory(GsonConverterFactory.create())
                     .build()
 

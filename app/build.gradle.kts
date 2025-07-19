@@ -73,4 +73,7 @@ dependencies {
 
     // For ViewModel lifecycle management
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.0")
+
+// Add this line to get access to more icons like 'Downloading'
+    implementation("androidx.compose.material:material-icons-extended-android:1.6.8") // Or the latest version
 }
