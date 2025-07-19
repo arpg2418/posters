@@ -1,5 +1,5 @@
 Posters is an ambitious wallpaper app, with a single aim, 
-"Make an App that is good to use and simple enough for anyone to start using".😎
+"Make an App that is feels Snappy and Good to Use, feels Fluid, while being Simple enough for anyone to start using".😎
 
 It's simple to use and still in pre-release stages. 
 
