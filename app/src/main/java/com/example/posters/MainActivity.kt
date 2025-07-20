@@ -170,9 +170,9 @@ fun HomeTopBar() {
     )
 }
 
+// Add this new reusable function
 @Composable
-fun ShimmerLoadingGrid() {
-    // This transition creates the continuous shimmer animation
+fun rememberShimmerBrush(): Brush {
     val transition = rememberInfiniteTransition(label = "shimmer")
     val translateAnim = transition.animateFloat(
         initialValue = 0f,
@@ -183,18 +183,19 @@ fun ShimmerLoadingGrid() {
         ),
         label = "shimmer-anim"
     )
-
-    // A brush that creates the shimmering gradient effect
-    val brush = Brush.linearGradient(
+    return Brush.linearGradient(
         colors = listOf(
-            Color.LightGray.copy(alpha = 0.6f),
-            Color.LightGray.copy(alpha = 0.2f),
-            Color.LightGray.copy(alpha = 0.6f)
+            Color.DarkGray.copy(alpha = 0.9f),
+            Color.DarkGray.copy(alpha = 0.7f),
+            Color.DarkGray.copy(alpha = 0.9f)
         ),
         start = Offset.Zero,
         end = Offset(x = translateAnim.value, y = translateAnim.value)
     )
+}
 
+@Composable
+fun ShimmerLoadingGrid() {
     // A placeholder grid that mimics the real grid's layout
     LazyVerticalStaggeredGrid(
         columns = StaggeredGridCells.Fixed(2),
@@ -208,7 +209,7 @@ fun ShimmerLoadingGrid() {
                     .fillMaxWidth()
                     .aspectRatio(0.7f)
                     .clip(RoundedCornerShape(16.dp))
-                    .background(brush)
+                    .background(rememberShimmerBrush())
             )
         }
     }
@@ -261,7 +262,11 @@ fun WallpaperThumbnail(wallpaper: Wallpaper, modifier: Modifier = Modifier, onCl
         SubcomposeAsyncImage(
             model = wallpaper.thumbnailUrl,
             loading = {
-                Box(modifier = Modifier.fillMaxSize().background(Color.DarkGray))
+                Spacer(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(rememberShimmerBrush()) // Use shimmer brush
+                )
             },
             contentDescription = wallpaper.name,
             contentScale = ContentScale.Crop,

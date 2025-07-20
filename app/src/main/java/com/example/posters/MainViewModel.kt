@@ -31,27 +31,27 @@ class MainViewModel : ViewModel() {
         viewModelScope.launch {
             wallpaperUiState = WallpaperUiState.Loading
             try {
-                // 1. Create a custom OkHttpClient with a longer timeout
+                // Create an OkHttpClient with timeouts
                 val okHttpClient = OkHttpClient.Builder()
-                    .connectTimeout(60, TimeUnit.SECONDS) // Wait 60 seconds to connect
-                    .readTimeout(60, TimeUnit.SECONDS)    // Wait 60 seconds for data
-                    .writeTimeout(60, TimeUnit.SECONDS)   // Wait 60 seconds to send data
+                    .connectTimeout(60, TimeUnit.SECONDS)
+                    .readTimeout(60, TimeUnit.SECONDS)
+                    .writeTimeout(60, TimeUnit.SECONDS)
                     .build()
-
-                // 2. Build Retrofit using our custom client
+                // Create a Retrofit instance with the OkHttpClient
                 val retrofit = Retrofit.Builder()
                     .baseUrl("https://posters-backend-ibn4.onrender.com/") // Your Render URL
-                    .client(okHttpClient) // <-- Add the custom client here
+                    .client(okHttpClient)
                     .addConverterFactory(GsonConverterFactory.create())
                     .build()
 
+                // Create an instance of ApiService
                 val apiService = retrofit.create(ApiService::class.java)
 
-                // Make the network call
-                wallpaperUiState = WallpaperUiState.Success(apiService.getWallpapers())
+                // Make the simple network call.
+                val newWallpapers = apiService.getWallpapers()
+                wallpaperUiState = WallpaperUiState.Success(newWallpapers)
 
             } catch (e: Exception) {
-                // Handle errors (e.g., no internet)
                 wallpaperUiState = WallpaperUiState.Error
             }
         }

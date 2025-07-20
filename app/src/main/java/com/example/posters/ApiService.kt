@@ -3,6 +3,7 @@ package com.example.posters
 import retrofit2.http.GET
 
 interface ApiService {
-    @GET("getWallpapers") // This matches the endpoint name in your backend code
+    // We are back to a simple GET request with no body.
+    @GET("getWallpapers")
     suspend fun getWallpapers(): List<Wallpaper>
 }
