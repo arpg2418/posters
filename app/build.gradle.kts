@@ -84,4 +84,10 @@ dependencies {
 
 // Add this line to get access to more icons like 'Downloading'
     implementation("androidx.compose.material:material-icons-extended-android:1.6.8") // Or the latest version
+
+    // Add this line to enable QR code generation
+    implementation("com.google.zxing:core:3.5.3")
+
+    // Add this line to enable color extraction from images
+    implementation("androidx.palette:palette-ktx:1.0.0")
 }

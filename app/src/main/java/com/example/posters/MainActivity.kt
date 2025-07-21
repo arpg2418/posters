@@ -1,43 +1,97 @@
 package com.example.posters
 
-import android.app.Activity
+import android.annotation.SuppressLint
 import android.app.WallpaperManager
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
-import android.graphics.drawable.BitmapDrawable
 import android.net.Uri
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.animation.*
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
+import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan
 import androidx.compose.foundation.lazy.staggeredgrid.items
+import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.filled.CloudDownload
+import androidx.compose.material.icons.filled.IosShare
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CenterAlignedTopAppBar
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.SubcomposeAsyncImage
 import coil.compose.rememberAsyncImagePainter
 import coil.imageLoader
@@ -49,23 +103,21 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.foundation.gestures.detectTransformGestures
-import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan
-import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalView
+import com.google.zxing.BarcodeFormat
+import com.google.zxing.qrcode.QRCodeWriter
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Shapes
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.toArgb
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
-import androidx.lifecycle.viewmodel.compose.viewModel
 
 
 // Data class defining the structure of a wallpaper object.
@@ -81,6 +133,16 @@ data class Wallpaper(
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // --- ADD THIS BLOCK HERE ---
+        // This sets the app to immersive mode from the very beginning.
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        val insetsController = WindowCompat.getInsetsController(window, window.decorView)
+        insetsController.hide(WindowInsetsCompat.Type.navigationBars())
+        insetsController.systemBarsBehavior =
+            WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        // ---------------------------
+
         setContent {
             WallpaperAppTheme {
                 Surface(
@@ -292,6 +354,12 @@ fun WallpaperOverlay(wallpaper: Wallpaper?, onClose: () -> Unit) {
     var isFullScreen by remember { mutableStateOf(false) }
     var scale by remember { mutableFloatStateOf(1f) }
     var offset by remember { mutableStateOf(Offset.Zero) }
+    var showShareSheet by remember { mutableStateOf(false) }
+
+    // It will hold the extracted accent color. It's nullable because it takes time to generate.
+    var dynamicButtonColor by remember { mutableStateOf<Color?>(null) }
+    val fallbackButtonColor = MaterialTheme.colorScheme.primary
+
 
     // This effect resets everything when the overlay is closed
     LaunchedEffect(wallpaper) {
@@ -306,6 +374,29 @@ fun WallpaperOverlay(wallpaper: Wallpaper?, onClose: () -> Unit) {
         if (!isFullScreen) {
             scale = 1f
             offset = Offset.Zero
+        }
+    }
+    // This effect extracts the accent color from the wallpaper image
+    LaunchedEffect(wallpaper) {
+        if (wallpaper != null) {
+            // Use Coil to load the image bitmap
+            val request = ImageRequest.Builder(context)
+                .data(wallpaper.thumbnailUrl) // Use the medium-res preview for speed
+                .allowHardware(false)
+                .build()
+            val result = (context.imageLoader.execute(request) as? SuccessResult)?.drawable
+            if (result != null) {
+                // Use the Palette library to generate colors
+                val palette = androidx.palette.graphics.Palette.from(
+                    (result as android.graphics.drawable.BitmapDrawable).bitmap
+                ).generate()
+                // Find a vibrant color, with a fallback to the primary theme color
+                val vibrantColor = palette.getVibrantColor(fallbackButtonColor.toArgb())
+                dynamicButtonColor = Color(vibrantColor)
+            }
+        } else {
+            // Reset the color when the overlay is closed
+            dynamicButtonColor = null
         }
     }
 
@@ -335,6 +426,7 @@ fun WallpaperOverlay(wallpaper: Wallpaper?, onClose: () -> Unit) {
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center
+
                     ) {
                         val imageModifier = if (isFullScreen) Modifier.fillMaxSize() else Modifier.fillMaxWidth().heightIn(max = 500.dp)
 
@@ -410,35 +502,58 @@ fun WallpaperOverlay(wallpaper: Wallpaper?, onClose: () -> Unit) {
                                 Row(
                                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                                 ) {
+                                    //View High-Res
+                                    Button(
+                                        onClick = { isFullScreen = true }
+                                    ) {
+                                        Text("View Poster in High-Res")
+                                    }
+                                    //Set Wallpaper
                                     Button(onClick = {
-                                        coroutineScope.launch {
-                                            wallpaper?.let { openSystemWallpaperPreview(context, it) }
-                                        }
-                                    }) {
-                                        Text("Align Poster & Set")
+                                        coroutineScope.launch {wallpaper?.let {openSystemWallpaperPreview(context,it)}}
+                                    },colors = ButtonDefaults.buttonColors(
+                                        containerColor = dynamicButtonColor ?: MaterialTheme.colorScheme.primary))
+                                    {
+                                        Text("Align & Set")
                                     }
 
-                                    Button(onClick = {
-                                        coroutineScope.launch {
-                                            wallpaper?.let { setWallpaper(context, it) }
-                                        }
-                                    }) {
-                                        Text("Set Poster Directly")
-                                    }
                                 }
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                ){
+                                    //Share Button
+                                    Button(onClick = { showShareSheet = true })
+                                    {
+                                    Icon(
+                                        imageVector = Icons.Filled.IosShare,
+                                        contentDescription = "Download",
+                                        )
+                                    }
 
-                                // Second row with the "view" button
-                                Button(
-                                    onClick = { isFullScreen = true }
-                                ) {
-                                    Text("View Poster in High-Res")
+                                    //Download image button
+                                    Button(onClick = {
+                                        coroutineScope.launch {
+                                            wallpaper?.let {
+                                                openSystemWallpaperPreview(
+                                                    context,
+                                                    it
+                                                )
+                                            }
+                                        }
+                                    },colors = ButtonDefaults.buttonColors(
+                                        containerColor = dynamicButtonColor ?: MaterialTheme.colorScheme.primary))
+                                    {
+                                        Icon(
+                                            imageVector = Icons.Filled.CloudDownload,
+                                            contentDescription = "Download",
+                                        )
+                                    }
                                 }
                             }
                         }
                     }
                 }
             }
-
             IconButton(
                 onClick = { if (isFullScreen) isFullScreen = false else onClose() },
                 modifier = Modifier
@@ -459,20 +574,113 @@ fun WallpaperOverlay(wallpaper: Wallpaper?, onClose: () -> Unit) {
                         .padding(8.dp) // Add some inner padding so the icon doesn't touch the edge
                 )
             }
+
+            // This will show the bottom sheet when the state is true
+            if (showShareSheet && wallpaper != null) {
+                ShareBottomSheet(
+                    wallpaper = wallpaper,
+                    onDismiss = { showShareSheet = false }
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ShareBottomSheet(
+    wallpaper: Wallpaper,
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+    val sheetState = rememberModalBottomSheetState()
+
+    // This is the "smart" URL that will point to our redirector page
+    // We will create this page in a later step.
+    val shareUrl = "https://arpg2418.github.io/posters-redirect/?wallpaperId=${wallpaper.id}"
+
+    // State to hold the generated QR code bitmap
+    var qrCodeBitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
+
+    // Generate the QR code when the sheet is first composed
+    LaunchedEffect(shareUrl) {
+        val writer = QRCodeWriter()
+        val bitMatrix = writer.encode(shareUrl, BarcodeFormat.QR_CODE, 512, 512)
+        val width = bitMatrix.width
+        val height = bitMatrix.height
+        val bmp = Bitmap.createBitmap(width, height, Bitmap.Config.RGB_565)
+        for (x in 0 until width) {
+            for (y in 0 until height) {
+                bmp.setPixel(x, y, if (bitMatrix[x, y]) android.graphics.Color.BLACK else android.graphics.Color.WHITE)
+            }
+        }
+        qrCodeBitmap = bmp
+    }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+                .padding(bottom = 32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Text("Share Poster", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+
+            // Display the generated QR code
+            qrCodeBitmap?.let {
+                Image(
+                    bitmap = it.asImageBitmap(),
+                    contentDescription = "QR Code for sharing",
+                    modifier = Modifier
+                        .size(200.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                )
+            }
+
+            // Display the shareable URL
+            OutlinedTextField(
+                value = shareUrl,
+                onValueChange = {},
+                readOnly = true,
+                label = { Text("Shareable Link") },
+                modifier = Modifier.fillMaxWidth(),
+                trailingIcon = {
+                    // Native Share Button
+                    IconButton(onClick = {
+                        val sendIntent = Intent().apply {
+                            action = Intent.ACTION_SEND
+                            putExtra(Intent.EXTRA_TEXT, shareUrl)
+                            type = "text/plain"
+                        }
+                        val shareIntent = Intent.createChooser(sendIntent, "Share wallpaper via...")
+                        context.startActivity(shareIntent)
+                    }) {
+                        Icon(Icons.Default.Share, contentDescription = "Share link")
+                    }
+                }
+            )
         }
     }
 }
 
 //Downloads Full-Res Wallpaper and Gets the URI
+@SuppressLint("UseKtx")
 private suspend fun downloadAndGetUri(context: Context, wallpaper: Wallpaper): Uri? {
     val loader = context.imageLoader
     val request = ImageRequest.Builder(context)
         .data(wallpaper.fullUrl)
-        .allowHardware(false)
+        .allowHardware(false) // This is important for saving
         .build()
 
     return try {
+        // 1. Execute the request and get the result as a generic Drawable
         val result = (loader.execute(request) as SuccessResult).drawable
+
         // Create a new, blank Bitmap with the same dimensions as the downloaded image.
         val bitmap = Bitmap.createBitmap(
             result.intrinsicWidth,
@@ -485,16 +693,22 @@ private suspend fun downloadAndGetUri(context: Context, wallpaper: Wallpaper): U
         result.setBounds(0, 0, canvas.width, canvas.height)
         result.draw(canvas)
 
-        val file = File(context.filesDir, "${wallpaper.id}.jpg")
+        val wallpapersDir = File(context.filesDir, "wallpapers") // 1. Create a reference to the 'wallpapers' directory.
+        if (!wallpapersDir.exists()) {
+            wallpapersDir.mkdirs() // 2. Ensure the directory exists. If it doesn't, create it.
+        }
+        val file = File(context.filesDir, "${wallpaper.id}.jpg")// 5. Save the universally-formatted Bitmap to a file.
+
         FileOutputStream(file).use { stream ->
             bitmap.compress(Bitmap.CompressFormat.JPEG, 100, stream)
         }
-        // Return the content URI for the saved file
+        // 6. Return the content URI for the saved file.
         WallpaperProvider.getUriForWallpaper(wallpaper.id)
     } catch (e: Exception) {
         e.printStackTrace()
         withContext(Dispatchers.Main) {
-            Toast.makeText(context, "Failed to download wallpaper.", Toast.LENGTH_SHORT).show()
+//            Toast.makeText(context, "Failed to download wallpaper.", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, "Download Error: ${e.message}", Toast.LENGTH_LONG).show()
         }
         null
     }
@@ -522,56 +736,99 @@ private suspend fun setWallpaper(context: Context, wallpaper: Wallpaper) {
 }
 
 //Function for launching the system preview
+//private suspend fun openSystemWallpaperPreview(context: Context, wallpaper: Wallpaper) {
+//    // This part remains the same. We still need the URI.
+//    val uri = downloadAndGetUri(context, wallpaper) ?: return
+//
+//    // --- TIER 1: Try the most specific, modern intent first ---
+//    // This intent explicitly targets the modern Google Wallpapers picker.
+//    val modernIntent = Intent(Intent.ACTION_SET_WALLPAPER)
+//    modernIntent.setClassName(
+//        "com.google.android.apps.wallpaper",
+//        "com.google.android.apps.wallpaper.picker.DeepLinkActivity"
+//    )
+//    modernIntent.setDataAndType(uri, "image/jpeg")
+//    modernIntent.putExtra("mimeType", "image/jpeg")
+//    modernIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+//
+//    try {
+//        // Attempt to launch the most modern picker
+//        context.startActivity(modernIntent)
+//        return // If successful, we are done.
+//    } catch (e: Exception) {
+//        // This will fail if the Google Wallpapers app isn't the handler.
+//        e.printStackTrace()
+//    }
+//
+//    // --- TIER 2: Fallback to the general "set wallpaper" action ---
+//    // This is the code we tried before. It's the second-best option.
+//    val generalIntent = Intent(Intent.ACTION_SET_WALLPAPER)
+//    generalIntent.setDataAndType(uri, "image/jpeg")
+//    generalIntent.putExtra("mimeType", "image/jpeg")
+//    generalIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+//
+//    try {
+//        context.startActivity(generalIntent)
+//        return // If successful, we are done.
+//    } catch (e: Exception) {
+//        // This will fail on systems that have no handler for this action.
+//        e.printStackTrace()
+//    }
+//
+//    // --- TIER 3: Fallback to the oldest, most compatible cropper ---
+//    // This is the original intent that shows the simple crop view.
+//    // It's our last resort to ensure the user can always set a wallpaper.
+//    try {
+//        val olderIntent = WallpaperManager.getInstance(context).getCropAndSetWallpaperIntent(uri)
+//        context.startActivity(olderIntent)
+//    } catch (e: Exception) {
+//        // If even this fails, show a final error message.
+//        e.printStackTrace()
+//        withContext(Dispatchers.Main) {
+//            Toast.makeText(context, "Could not open any system wallpaper setter.", Toast.LENGTH_SHORT).show()
+//        }
+//    }
+//}
+
+// In MainActivity.kt
+
 private suspend fun openSystemWallpaperPreview(context: Context, wallpaper: Wallpaper) {
-    // This part remains the same. We still need the URI.
+    // This part remains the same.
     val uri = downloadAndGetUri(context, wallpaper) ?: return
 
-    // --- TIER 1: Try the most specific, modern intent first ---
-    // This intent explicitly targets the modern Google Wallpapers picker.
-    val modernIntent = Intent(Intent.ACTION_SET_WALLPAPER)
-    modernIntent.setClassName(
-        "com.google.android.apps.wallpaper",
-        "com.google.android.apps.wallpaper.picker.DeepLinkActivity"
-    )
-    modernIntent.setDataAndType(uri, "image/jpeg")
-    modernIntent.putExtra("mimeType", "image/jpeg")
-    modernIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    // --- NEW, SMARTER LOGIC ---
+    // 1. Create the modern, general-purpose "set wallpaper" intent.
+    val intent = Intent(Intent.ACTION_SET_WALLPAPER)
+    intent.setDataAndType(uri, "image/jpeg")
+    intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
 
-    try {
-        // Attempt to launch the most modern picker
-        context.startActivity(modernIntent)
-        return // If successful, we are done.
-    } catch (e: Exception) {
-        // This will fail if the Google Wallpapers app isn't the handler.
-        e.printStackTrace()
+    // 2. Ask the Android system's PackageManager to find the best app for this job.
+    val packageManager = context.packageManager
+    val resolveInfo = packageManager.resolveActivity(intent, PackageManager.MATCH_DEFAULT_ONLY)
+
+    // 3. Check if a default app was found.
+    if (resolveInfo != null) {
+        try {
+            // 3a. If we found a default app, target our intent specifically at that app.
+            //     This prevents the chooser dialog from appearing.
+            intent.setPackage(resolveInfo.activityInfo.packageName)
+            context.startActivity(intent)
+            return // Success!
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 
-    // --- TIER 2: Fallback to the general "set wallpaper" action ---
-    // This is the code we tried before. It's the second-best option.
-    val generalIntent = Intent(Intent.ACTION_SET_WALLPAPER)
-    generalIntent.setDataAndType(uri, "image/jpeg")
-    generalIntent.putExtra("mimeType", "image/jpeg")
-    generalIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-
-    try {
-        context.startActivity(generalIntent)
-        return // If successful, we are done.
-    } catch (e: Exception) {
-        // This will fail on systems that have no handler for this action.
-        e.printStackTrace()
-    }
-
-    // --- TIER 3: Fallback to the oldest, most compatible cropper ---
-    // This is the original intent that shows the simple crop view.
-    // It's our last resort to ensure the user can always set a wallpaper.
+    // --- FALLBACK: The Oldest, Most Compatible Cropper ---
+    // If no default app was found, or if launching it failed,
+    // we fall back to the universally compatible cropper.
     try {
         val olderIntent = WallpaperManager.getInstance(context).getCropAndSetWallpaperIntent(uri)
         context.startActivity(olderIntent)
     } catch (e: Exception) {
-        // If even this fails, show a final error message.
         e.printStackTrace()
         withContext(Dispatchers.Main) {
-            Toast.makeText(context, "Could not open any system wallpaper setter.", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, "Could not open system wallpaper setter.", Toast.LENGTH_SHORT).show()
         }
     }
 }
