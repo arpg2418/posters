@@ -55,6 +55,8 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan
+import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.graphicsLayer
@@ -96,58 +98,33 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun MainScreen(viewModel: MainViewModel = viewModel()) {
     var selectedWallpaper by remember { mutableStateOf<Wallpaper?>(null) }
-    val uiState = viewModel.wallpaperUiState
-
-    val view = LocalView.current
-    if (!view.isInEditMode) {
-        SideEffect {
-            val window = (view.context as Activity).window
-            // This makes the navigation bar transparent and lets our app draw behind it
-            WindowCompat.setDecorFitsSystemWindows(window, false)
-
-            val insetsController = WindowCompat.getInsetsController(window, view)
-            // Hide the system navigation bar
-            insetsController.hide(WindowInsetsCompat.Type.navigationBars())
-            // Set the behavior so that the bar reappears with a swipe from the edge
-            insetsController.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-        }
-    }
+    val uiState = viewModel.uiState // Observe the new state object
 
     Box(Modifier.fillMaxSize()) {
         Scaffold(
-            topBar = {
-                // The top bar is now simpler, with search removed.
-                HomeTopBar()
-            },
+            topBar = { HomeTopBar() },
             containerColor = Color(0xFF121212)
         ) { paddingValues ->
             Column(modifier = Modifier.padding(paddingValues)) {
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // This block reacts to the state from the ViewModel (Loading, Success, Error).
-                when (uiState) {
-                    is WallpaperUiState.Loading -> {
-                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            ShimmerLoadingGrid()
-                        }
+                if (uiState.isLoading) {
+                    ShimmerLoadingGrid()
+                } else if (uiState.error != null) {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text(uiState.error, color = Color.White)
                     }
-                    is WallpaperUiState.Success -> {
-                        // The grid now directly uses the list from the success state.
-                        WallpaperGrid(
-                            wallpapers = uiState.wallpapers,
-                            onWallpaperClick = { wallpaper -> selectedWallpaper = wallpaper }
-                        )
-                    }
-                    is WallpaperUiState.Error -> {
-                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Text("Failed to load wallpapers.", color = Color.White)
-                        }
-                    }
+                } else {
+                    WallpaperGrid(
+                        wallpapers = uiState.wallpapers,
+                        isLoadingNextPage = uiState.isLoadingNextPage,
+                        onWallpaperClick = { wallpaper -> selectedWallpaper = wallpaper },
+                        onLoadMore = { viewModel.loadNextPage() } // Pass the event handler
+                    )
                 }
             }
         }
 
-        // The overlay that appears when a wallpaper is selected.
         WallpaperOverlay(
             wallpaper = selectedWallpaper,
             onClose = { selectedWallpaper = null }
@@ -218,14 +195,36 @@ fun ShimmerLoadingGrid() {
 // The staggered grid that displays the wallpaper thumbnails.
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun WallpaperGrid(wallpapers: List<Wallpaper>, onWallpaperClick: (Wallpaper) -> Unit) {
+fun WallpaperGrid(
+    wallpapers: List<Wallpaper>,
+    isLoadingNextPage: Boolean,
+    onWallpaperClick: (Wallpaper) -> Unit, // <-- This is the missing parameter
+    onLoadMore: () -> Unit
+) {
     if (wallpapers.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Text("No wallpapers found.", color = Color.Gray)
         }
         return
     }
+
+    val gridState = rememberLazyStaggeredGridState() // Remember the grid's scroll state
+
+    // This effect block watches the scroll state to trigger loading the next page
+    LaunchedEffect(gridState) {
+        snapshotFlow { gridState.layoutInfo.visibleItemsInfo }
+            .collect { visibleItems ->
+                val lastVisibleItemIndex = visibleItems.lastOrNull()?.index ?: 0
+                val totalItemCount = gridState.layoutInfo.totalItemsCount
+                // If the last visible item is close to the end of the list, load more
+                if (lastVisibleItemIndex >= totalItemCount - 10) {
+                    onLoadMore()
+                }
+            }
+    }
+
     LazyVerticalStaggeredGrid(
+        state = gridState,
         columns = StaggeredGridCells.Fixed(2),
         modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
         verticalItemSpacing = 12.dp,
@@ -242,8 +241,18 @@ fun WallpaperGrid(wallpapers: List<Wallpaper>, onWallpaperClick: (Wallpaper) -> 
                     fadeInSpec = tween(durationMillis = 300), // Example for fade in
                     fadeOutSpec = tween(durationMillis = 300)  // Example for fade out
                 ),
-                onClick = { onWallpaperClick(wallpaper) }
+                onClick = {onWallpaperClick(wallpaper)}
             )
+        }// Add a loading spinner at the bottom of the grid when fetching the next page
+        if (isLoadingNextPage) {
+            item(span = StaggeredGridItemSpan.FullLine) {
+                Box(
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator()
+                }
+            }
         }
     }
 }
@@ -434,7 +443,7 @@ fun WallpaperOverlay(wallpaper: Wallpaper?, onClose: () -> Unit) {
                 onClick = { if (isFullScreen) isFullScreen = false else onClose() },
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .padding(bottom = 64.dp) // Keep the padding from the bottom
+                    .padding(bottom = 55.dp) // Keep the padding from the bottom
                     .background(
                         color = Color.DarkGray.copy(alpha = 0.9f), // Semi-transparent background
                         shape = CircleShape
@@ -446,7 +455,7 @@ fun WallpaperOverlay(wallpaper: Wallpaper?, onClose: () -> Unit) {
                     contentDescription = "Close",
                     tint = Color.White,
                     modifier = Modifier
-                        .size(56.dp) // Increase the icon size
+                        .size(64.dp) // Increase the icon size
                         .padding(8.dp) // Add some inner padding so the icon doesn't touch the edge
                 )
             }
@@ -464,7 +473,17 @@ private suspend fun downloadAndGetUri(context: Context, wallpaper: Wallpaper): U
 
     return try {
         val result = (loader.execute(request) as SuccessResult).drawable
-        val bitmap = (result as BitmapDrawable).bitmap
+        // Create a new, blank Bitmap with the same dimensions as the downloaded image.
+        val bitmap = Bitmap.createBitmap(
+            result.intrinsicWidth,
+            result.intrinsicHeight,
+            Bitmap.Config.ARGB_8888
+        )
+        // Create a Canvas to draw on our new Bitmap.
+        val canvas = android.graphics.Canvas(bitmap)
+        // Draw the downloaded image (whatever its format) onto our canvas.
+        result.setBounds(0, 0, canvas.width, canvas.height)
+        result.draw(canvas)
 
         val file = File(context.filesDir, "${wallpaper.id}.jpg")
         FileOutputStream(file).use { stream ->
