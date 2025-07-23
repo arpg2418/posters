@@ -21,11 +21,11 @@ android {
     buildTypes {
         release {
             // This is the most important line. It enables code shrinking with R8.
-            isMinifyEnabled = true
+            isMinifyEnabled = false
 
             // This enables resource shrinking (removes unused images, layouts, etc.)
             // It only works if isMinifyEnabled is true.
-            isShrinkResources = true
+            isShrinkResources = false
 
             // This tells the shrinker which rules to follow to avoid breaking your app.
             // The default file is usually enough for most projects.
@@ -90,4 +90,7 @@ dependencies {
 
     // Add this line to enable color extraction from images
     implementation("androidx.palette:palette-ktx:1.0.0")
+
+    // Add this line to enable the 'by viewModels()' delegate
+    implementation("androidx.activity:activity-compose:1.9.0")
 }

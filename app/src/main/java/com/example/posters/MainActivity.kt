@@ -11,6 +11,7 @@ import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.viewModels
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.LinearEasing
@@ -115,6 +116,7 @@ import androidx.compose.material3.Shapes
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -131,6 +133,8 @@ data class Wallpaper(
 
 // This is the main entry point of your app.
 class MainActivity : ComponentActivity() {
+    // We need a reference to the ViewModel to pass the intent.
+    private val viewModel: MainViewModel by viewModels()
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -141,6 +145,10 @@ class MainActivity : ComponentActivity() {
         insetsController.hide(WindowInsetsCompat.Type.navigationBars())
         insetsController.systemBarsBehavior =
             WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+
+        // Handle the intent that launched the app
+        viewModel.handleIncomingIntent(intent)
+        
         // ---------------------------
 
         setContent {
@@ -154,13 +162,29 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+    // This function is called when the app is already running and receives a new deep link.
+    override fun onNewIntent(intent: Intent) { // <-- The '?' is removed
+        super.onNewIntent(intent)
+        viewModel.handleIncomingIntent(intent)
+    }
 }
+
 
 // This composable orchestrates the main UI, including the top bar, grid, and overlay.
 @Composable
 fun MainScreen(viewModel: MainViewModel = viewModel()) {
     var selectedWallpaper by remember { mutableStateOf<Wallpaper?>(null) }
     val uiState = viewModel.uiState // Observe the new state object
+
+    LaunchedEffect(viewModel.deepLinkedWallpaper) {
+        // When the deep-linked wallpaper is successfully loaded in the ViewModel...
+        if (viewModel.deepLinkedWallpaper != null) {
+            // ...set it as the selected wallpaper to open the overlay.
+            selectedWallpaper = viewModel.deepLinkedWallpaper
+            // Clear it so this doesn't run again on rotation.
+            viewModel.clearDeepLink()
+        }
+    }
 
     Box(Modifier.fillMaxSize()) {
         Scaffold(
@@ -509,12 +533,20 @@ fun WallpaperOverlay(wallpaper: Wallpaper?, onClose: () -> Unit) {
                                         Text("View Poster in High-Res")
                                     }
                                     //Set Wallpaper
-                                    Button(onClick = {
-                                        coroutineScope.launch {wallpaper?.let {openSystemWallpaperPreview(context,it)}}
-                                    },colors = ButtonDefaults.buttonColors(
-                                        containerColor = dynamicButtonColor ?: MaterialTheme.colorScheme.primary))
+                                    Button(
+//                                        onClick = {coroutineScope.launch {wallpaper?.let {openSystemWallpaperPreview(context,it)}}},
+                                        onClick = {Toast.makeText(context, "Custom Wallpaper Preview and Set COMING SOON!", Toast.LENGTH_SHORT).show()},
+//                                        colors = ButtonDefaults.buttonColors(containerColor = dynamicButtonColor ?: MaterialTheme.colorScheme.primary),
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = (dynamicButtonColor ?: MaterialTheme.colorScheme.primary).copy(alpha = 0.5f),
+                                            contentColor = MaterialTheme.colorScheme.onPrimary
+                                        )
+//                                        enabled = false
+                                    )
                                     {
-                                        Text("Align & Set")
+                                        Text("Align & Set",
+                                            // This adds the strikethrough effect to the text
+                                            textDecoration = TextDecoration.LineThrough)
                                     }
 
                                 }
@@ -534,14 +566,15 @@ fun WallpaperOverlay(wallpaper: Wallpaper?, onClose: () -> Unit) {
                                     Button(onClick = {
                                         coroutineScope.launch {
                                             wallpaper?.let {
-                                                openSystemWallpaperPreview(
+                                                saveWallpaperToGallery(
                                                     context,
                                                     it
                                                 )
                                             }
                                         }
                                     },colors = ButtonDefaults.buttonColors(
-                                        containerColor = dynamicButtonColor ?: MaterialTheme.colorScheme.primary))
+                                        containerColor = dynamicButtonColor ?: MaterialTheme.colorScheme.primary,
+                                        contentColor = MaterialTheme.colorScheme.onPrimary))
                                     {
                                         Icon(
                                             imageVector = Icons.Filled.CloudDownload,
@@ -829,6 +862,52 @@ private suspend fun openSystemWallpaperPreview(context: Context, wallpaper: Wall
         e.printStackTrace()
         withContext(Dispatchers.Main) {
             Toast.makeText(context, "Could not open system wallpaper setter.", Toast.LENGTH_SHORT).show()
+        }
+    }
+}
+
+private suspend fun saveWallpaperToGallery(context: Context, wallpaper: Wallpaper) {
+    // We can reuse our existing download logic to get the bitmap
+    val loader = context.imageLoader
+    val request = ImageRequest.Builder(context)
+        .data(wallpaper.fullUrl)
+        .allowHardware(false)
+        .build()
+
+    try {
+        val result = (loader.execute(request) as SuccessResult).drawable
+        val bitmap = (result as android.graphics.drawable.BitmapDrawable).bitmap
+
+        // Use MediaStore to save the image to the public Pictures directory
+        val contentValues = android.content.ContentValues().apply {
+            put(android.provider.MediaStore.Images.Media.DISPLAY_NAME, "${wallpaper.id}.jpg")
+            put(android.provider.MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
+            // This will place the image in a "Pictures/Posters" folder on modern Android
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                put(android.provider.MediaStore.Images.Media.RELATIVE_PATH, "Pictures/Posters")
+            }
+        }
+
+        val resolver = context.contentResolver
+        val uri = resolver.insert(android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
+
+        if (uri != null) {
+            resolver.openOutputStream(uri).use { stream ->
+                if (stream != null) {
+                    bitmap.compress(Bitmap.CompressFormat.JPEG, 100, stream)
+                }
+            }
+            withContext(Dispatchers.Main) {
+                Toast.makeText(context, "Poster saved to Gallery!", Toast.LENGTH_SHORT).show()
+            }
+        } else {
+            throw java.io.IOException("Failed to create new MediaStore record.")
+        }
+
+    } catch (e: Exception) {
+        e.printStackTrace()
+        withContext(Dispatchers.Main) {
+            Toast.makeText(context, "Failed to save poster.", Toast.LENGTH_SHORT).show()
         }
     }
 }

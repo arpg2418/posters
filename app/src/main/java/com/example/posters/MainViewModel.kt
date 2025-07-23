@@ -1,5 +1,6 @@
 package com.example.posters
 
+import android.content.Intent
 import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -24,14 +25,18 @@ data class WallpaperUiState(
 class MainViewModel : ViewModel() {
     var uiState by mutableStateOf(WallpaperUiState())
         private set
+
+    var deepLinkedWallpaper by mutableStateOf<Wallpaper?>(null)
+        private set
+
     private var currentPage = 0
     private lateinit var apiService: ApiService
 
     init {
         val okHttpClient = OkHttpClient.Builder()
-            .connectTimeout(60, TimeUnit.SECONDS)
-            .readTimeout(60, TimeUnit.SECONDS)
-            .writeTimeout(60, TimeUnit.SECONDS)
+            .connectTimeout(90, TimeUnit.SECONDS)
+            .readTimeout(90, TimeUnit.SECONDS)
+            .writeTimeout(90, TimeUnit.SECONDS)
             .build()
         val retrofit = Retrofit.Builder()
             .baseUrl("https://posters-backend-ibn4.onrender.com/") // Your Render URL
@@ -41,6 +46,37 @@ class MainViewModel : ViewModel() {
         apiService = retrofit.create(ApiService::class.java)
 
         loadNextPage() // Load the first page initially
+    }
+
+    fun clearDeepLink() {
+        deepLinkedWallpaper = null
+    }
+
+    fun handleIncomingIntent(intent: Intent?) {
+        if (intent?.action == Intent.ACTION_VIEW && intent.data != null) {
+            // The URI will be like: postersapp://wallpaper/some_wallpaper_id
+            // .lastPathSegment gets the final part, which is our ID.
+            val wallpaperId = intent.data?.lastPathSegment
+            if (wallpaperId != null) {
+//                deepLinkedWallpaperId = wallpaperId
+                fetchWallpaperById(wallpaperId) // Instead of just saving the ID, we now trigger the fetch
+            }
+        }
+    }
+
+    fun fetchWallpaperById(id: String) {
+        viewModelScope.launch {
+            try {
+                Log.d("MainViewModel", "Deep Link: Attempting to fetch wallpaper with ID: $id")
+                // Call the new endpoint to get the specific wallpaper
+                val wallpaper = apiService.getWallpaperById(id)
+                Log.d("MainViewModel", "Deep Link: Successfully fetched wallpaper: ${wallpaper.name}")
+                deepLinkedWallpaper = wallpaper
+            } catch (e: Exception) {
+                // Handle the case where the wallpaper ID is invalid
+                Log.e("MainViewModel", "Failed to fetch deep-linked wallpaper", e)
+            }
+        }
     }
 
     fun loadNextPage() {
@@ -78,7 +114,7 @@ class MainViewModel : ViewModel() {
                 }
             } catch (e: Exception) {
                 Log.e("MainViewModel", "Failed to load page: $currentPage", e)
-                uiState = uiState.copy(error = "Failed to load wallpapers.", isLoading = false, isLoadingNextPage = false)
+                uiState = uiState.copy(error = "Error: ${e.message}", isLoading = false, isLoadingNextPage = false)
             }
         }
     }

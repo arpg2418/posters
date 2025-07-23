@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="false">
+        <!-- This tells the app to trust your Render domain -->
+        <domain includeSubdomains="true">posters-backend-ibn4.onrender.com</domain>
+    </domain-config>
+</network-security-config>
